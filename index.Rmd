@@ -1,0 +1,185 @@
+---
+title: 'Project 1: Wrangling, Exploration, Visualization'
+author: "SDS322E"
+date: ''
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(formatR)
+```
+
+## Data Wrangling, Exploration, Visualization
+
+### Shaojie Hou, sh49854
+
+#### Introduction 
+**In this project, I'm going to explore the relationship between Living Happiness Quality and Population among different countries and regions in the world. There will be various criteria index of happiness of different countries in the first csv file 'world-happiness-report-2021.csv' and variables of population and countries in the second file '2021_population.csv'. I chose to analyze those two aspects of countries in the world because I want to confirm if the larger population in a country will lead to lower living quality or sense of happiness of its people. Those two dataframes are obtained from Kaggle and updated within the most recent year.**
+
+```{R}
+# read your datasets in here, e.g., with read_csv()
+world_happiness = read.csv("world-happiness-report-2021.csv")
+world_population = read.csv("2021_population.csv")
+```
+**Read csv file from home directory and assign names for those data frames**
+
+#### Tidying: Reshaping
+
+If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+
+```{R}
+# your tidying code (if applicable; can also wait until wrangling section)
+world_population %>% pivot_longer((3:4), names_to = "data_collected_year", values_to = "population") -> population_untidy
+
+population_untidy %>% pivot_wider(names_from = "data_collected_year", values_from = "population") %>% rename(.,c("population_2021" = "X2021_last_updated")) %>% rename(.,c("population_2020" = "X2020_population")) %>% rename(.,c("world_percentage" = "world_.")) -> population_tidy
+```
+**Utilize pivot_wider and pivot_longer of the population data frame based on the population in different years to make the data frame tidy; rename untidy columns**
+    
+#### Joining/Merging
+
+```{R}
+world_happiness %>% left_join(population_tidy, by = c("Country.name" = "country")) %>% na.omit() -> happiness_population
+```
+**By using left_join with common ID of country name in two dataframes, there are 149 rows and 28 columns after the join and after remove NA rows of the joined dataframe, there are 9 rows removed and 141 rows remaining .I choose the Country Name as the common ID of two original dataframes because all of the index of happiness and population are recorded based on different countries. In their original dataframes, there are 149 rows in world happiness dataframe and 228 rows in the world population dataframe. Therefore, the joined dataframe becomes smaller compared to their original dataframes.**
+
+```{r}
+anti_join(world_happiness, population_tidy, by = c("Country.name" = "country"))
+```
+**Based on the observation of anti_join, we can figure out that there are 8 countries in world_happiness dataframe but not in world population dataframe which are unique for world_happiness.**
+```{r}
+anti_join(population_tidy, world_happiness, by = c("country" = "Country.name"))
+```
+**Based on the observation of anti_join, we can figure out that there are 87 countries in world population dataframe but not in world_happiness dataframe which are unique for world population dataframe.**
+
+####  Wrangling
+##### (1)
+```{R}
+#Since the growth rate, world percentage, population in 2021, and population in 2020 are characters with comma or percentage, we cannot directly convert those columns with 'as.numeric()'. I used stringr and regex to remove those signs and mutate them with original columns to change their data type to 'dbl' for further analysis.
+
+population_2021 = happiness_population$population_2021
+tidy_population_2021 = str_remove_all(population_2021, "\\,")
+population_2020 = happiness_population$population_2020
+tidy_population_2020 = str_remove_all(population_2020, "\\,")
+world_percentage = happiness_population$world_percentage
+tidy_world_percentage = str_remove_all(world_percentage, "\\%")
+growth_rate = happiness_population$growth_rate
+tidy_growth_rate = str_remove_all(growth_rate, "\\%")
+
+happiness_population %>% mutate(population_2021 = tidy_population_2021) %>% mutate(population_2021 = as.numeric(population_2021)) %>% mutate(population_2020 = tidy_population_2020) %>% mutate(population_2020 = as.numeric(population_2020)) %>% mutate(world_percentage = tidy_world_percentage) %>% mutate(world_percentage = as.numeric(world_percentage)) %>% mutate(growth_rate = tidy_growth_rate) %>% mutate(growth_rate = as.numeric(growth_rate)) %>% rename(.,c("growth_rate_percentage" = "growth_rate")) %>% rename(.,c("population_rank" = "rank")) -> numeric_population
+
+
+numeric_population %>% select(c("Country.name", "Regional.indicator", "Ladder.score")) %>% filter(Ladder.score >= 7) %>% select(1:3) %>% group_by(Regional.indicator) %>% summarize(n())
+```
+
+
+**Among all countries having ladder score over 7, we can find out that Western Europe has largest amount of them.**
+
+##### Summarize(1)
+```{r}
+numeric_population %>% group_by(Country.name) %>% summarize(population_increasing = population_2021 - population_2020, n()) %>% arrange(desc(population_increasing))
+```
+**Based on the data we summarize above, from 2020 to 2021, we can see that the population increases the most in India and the least in Japan which is even negative.**
+
+##### Summarize(2)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(mean(Explained.by..Perceptions.of.corruption), n()) %>% arrange(`mean(Explained.by..Perceptions.of.corruption)`)
+```
+**Based on the data we summarize above, we can see that the situation of corruption is the most serious in Central and East Europe and least serious in North America and ANZ**
+
+##### Summarize(3)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(max(population_2021),n()) %>% arrange(desc(`max(population_2021)`)) 
+
+```
+**Based on the data we summarize above, we can see that the maximum of population is in East Asia and the minimum of population is in Central and Eastern Europe.**
+
+##### Summarize(4)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(mean(Explained.by..Log.GDP.per.capita),n()) %>% arrange(desc(`mean(Explained.by..Log.GDP.per.capita)`))
+
+```
+**Based on the data we summarize above, we can see that Europe has the highest GDP per capita and Sub-Saharan Africa has the lowest GDP per capita.**
+
+##### Summarize(5)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(mean(Explained.by..Freedom.to.make.life.choices),n()) %>% arrange(desc(`mean(Explained.by..Freedom.to.make.life.choices)`))
+
+```
+**Based on the data we summarize above, we can see that the gap between rich and poor is the greatest in Middle East and North Africa and least in North America and ANZ**
+
+##### Summarize(6)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(sum(population_2021),n()) %>% arrange(desc(`sum(population_2021)`))
+```
+**Based on the data we summarize above, based on the unit of regional indicator, the largest total population appears in South Asia and the smallest total population appears in Central and Eastern Europe.**
+
+##### Summarize(7)
+```{r}
+regional_poplulation_diff = function(x){max(x) - min(x)}
+
+numeric_population %>% select("Country.name", "Regional.indicator", "Explained.by..Log.GDP.per.capita") %>% group_by(Regional.indicator) %>% summarise(regional_poplulation_diff(Explained.by..Log.GDP.per.capita),n()) %>% arrange(desc(`regional_poplulation_diff(Explained.by..Log.GDP.per.capita)`))
+
+```
+**Based on the data we summarize above, we can see that the gap between rich and poor is the greatest in Middle East and North Africa and least in North America and ANZ**
+
+##### Summarize(8)
+```{r}
+numeric_population %>% select("Country.name", "Regional.indicator", "Explained.by..Log.GDP.per.capita") %>% group_by(Regional.indicator) %>% summarise(sd(Explained.by..Log.GDP.per.capita), n()) %>% arrange(desc(`sd(Explained.by..Log.GDP.per.capita)`))
+```
+**Based on the data we summarize above, we can see that the stability of GDP per capita is the greatest in Southeast Asia and least in North America and ANZ**
+
+##### Summarize(9)
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% summarize(sum(world_percentage),n()) %>% arrange(desc(`sum(world_percentage)`))
+
+```
+**Based on the data we summarize above, we can see that South Asia takes the largest percentage of population in the world; by contrast, Ventral and Eastern Europe takes the smallest percentage.**
+
+##### Summarize(10)
+```{r}
+numeric_population %>% filter(population_rank > 50) %>% group_by(Regional.indicator) %>% summarise(n()) %>% arrange(desc(`n()`))
+
+```
+**Based on the data we summarize above, we can see that for the top 50 countries in population, Sub_Saharan Africa has the most amount and East Asia has the least amount.**
+
+#### Visualizing
+```{r}
+numeric_population %>% group_by(Regional.indicator) %>% mutate(average_socialsupport = mean(Social.support)) %>% summarize(sum(population_2021), average_socialsupport) %>% distinct() %>% ggplot(.,aes(x = `sum(population_2021)`, y = average_socialsupport)) + geom_point(size = 3, aes(color = Regional.indicator)) + geom_smooth(method = "lm") + theme_bw() + ggtitle("Scatterplot between average social support and population in different regions") + xlab("Population") + ylab("Average Social Support")
+
+```
+
+**Based on the graph above, we can find out that, in general, the higher average social support, the smaller population the region has.**
+
+```{r}
+numeric_population %>% filter(Ladder.score > mean(Ladder.score)) %>% group_by(Regional.indicator)%>% summarize(mean(Explained.by..Perceptions.of.corruption), sum(population_2021)) %>% ggplot(.,aes(x = `mean(Explained.by..Perceptions.of.corruption)` , y = `sum(population_2021)`)) + geom_point(size = 3, aes(color = Regional.indicator)) + geom_line() + theme_bw() + ggtitle("The relationship between corruption and population") + xlab("Average Corruption") + ylab("Population")
+  
+
+```
+
+**Except for East Asia(including the largest population of China), the relationship between corruption and population follows that the larger population, the larger corruption index.**
+
+```{R}
+numeric_population %>% select(c("Country.name", "Regional.indicator", "Ladder.score")) %>% filter(Ladder.score >= mean(Ladder.score)) %>% select(1:3) %>% group_by(Regional.indicator) %>% summarize(n()) %>% ggplot(.,aes(x = `n()`, y = Regional.indicator)) + geom_bar(stat = "summary", fun = mean, fill = "skyblue") + geom_errorbar(stat="summary", width = .5)+ theme_bw() + ggtitle("The Barplot of Countries exceed average ladder score") + xlab("Count") + ylab("Regions") + scale_x_continuous( breaks = seq(0,25,1))
+```
+
+**For all the countries exceeds the average ladder score, Western Europe has the largest amount and Sub-Saharan Africa has the least amount.**
+
+
+
+
